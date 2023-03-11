@@ -14,13 +14,16 @@ public class MicroblogDatabase {
         conn = DriverManager.getConnection(DB_URL, USER, PASS);
     }
 
-    public static void PUBLISH(String username, String header, String content) throws SQLException {
-        String sql = "INSERT INTO messages (username, content) VALUES (?, ?)";
+    public static void PUBLISH(String username, String header, String content) throws SQLException, ClassNotFoundException {
+        MicroblogDatabase db = new MicroblogDatabase();
+
+        String sql = "INSERT INTO messages (username, header, content) VALUES (?, ?, ?)";
         PreparedStatement pstmt = conn.prepareStatement(sql);
         pstmt.setString(1, username);
-        pstmt.setString(2, content);
+        pstmt.setString(2, header);
+        pstmt.setString(3, content);
         pstmt.executeUpdate();
-        System.out.println("Message inserted: " + content);
+        db.close();
     }
 
     public void selectAllMessages() throws SQLException {

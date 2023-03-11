@@ -7,25 +7,28 @@ import java.sql.SQLException;
 import java.util.Scanner;
 
 public class Client {
-    private static String pseudo;
+    protected static String pseudo;
+    protected static BufferedReader in;
+    protected static PrintWriter out;
+    protected static BufferedReader br;
     private static Scanner scanner = new Scanner(System.in);
 
     public Client() throws SQLException, ClassNotFoundException {
-        System.out.print("Enter username: ");
-        this.pseudo = scanner.nextLine();
+
     }
 
     public static void main(String[] args) throws IOException, SQLException, ClassNotFoundException {
         Socket s = new Socket(Server.SERVER, Server.PORT);
-        Client client = new Client();
+        System.out.print("Enter username: ");
+        pseudo = scanner.nextLine();
 
         if(MicroblogDatabase.authentification(pseudo)) {
-            BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));
-            PrintWriter out = new PrintWriter(s.getOutputStream(), true);
-            BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+            in = new BufferedReader(new InputStreamReader(s.getInputStream()));
+            out = new PrintWriter(s.getOutputStream(), true);
+            br = new BufferedReader(new InputStreamReader(System.in));
 
             //sending request to server
-            String header = client.pseudo;
+            String header = pseudo;
             out.println(header);
 
             //Wait for a response from the server
@@ -43,6 +46,12 @@ public class Client {
 
                 // Send the chosen operation to the server and wait for the result
                 out.println(choice);
+                switch (choice){
+                    case "PUBLISH":
+                        Publisher publisher = new Publisher();
+                        publisher.execute();
+                }
+
             }
         }
         s.close();
