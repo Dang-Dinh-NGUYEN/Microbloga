@@ -1,9 +1,11 @@
-import java.io.*;
-import java.net.Socket;
-import java.sql.SQLException;
-import java.util.Scanner;
+package Clients;
 
-public class Publisher extends Client{
+import Clients.Client;
+
+import java.io.*;
+import java.sql.SQLException;
+
+public class Publisher extends Client {
 
     public Publisher() throws SQLException, ClassNotFoundException {}
 

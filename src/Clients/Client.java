@@ -1,9 +1,18 @@
+package Clients;
+
+import Database.MicroblogDatabase;
+import Server.*;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Map;
 import java.util.Scanner;
 
 public class Client {
@@ -13,16 +22,14 @@ public class Client {
     protected static BufferedReader br;
     private static Scanner scanner = new Scanner(System.in);
 
-    public Client() throws SQLException, ClassNotFoundException {
-
-    }
+    public Client() throws SQLException, ClassNotFoundException {}
 
     public static void main(String[] args) throws IOException, SQLException, ClassNotFoundException {
         Socket s = new Socket(Server.SERVER, Server.PORT);
         System.out.print("Enter username: ");
         pseudo = scanner.nextLine();
 
-        if(MicroblogDatabase.authentification(pseudo)) {
+        if(MicroblogDatabase.Authentification(pseudo)) {
             in = new BufferedReader(new InputStreamReader(s.getInputStream()));
             out = new PrintWriter(s.getOutputStream(), true);
             br = new BufferedReader(new InputStreamReader(System.in));
@@ -46,10 +53,11 @@ public class Client {
 
                 // Send the chosen operation to the server and wait for the result
                 out.println(choice);
-                switch (choice){
-                    case "PUBLISH":
-                        Publisher publisher = new Publisher();
-                        publisher.execute();
+                if(choice.equals("PUBLISH")){
+                    Publisher publisher = new Publisher();
+                    publisher.execute();
+                }else if(choice.startsWith("RCV_IDS")){
+                    MicroblogDatabase.selectMessages(choice);
                 }
 
             }
