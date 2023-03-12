@@ -90,8 +90,8 @@ public class MicroblogDatabase {
 
     //public static void  selectMessagesById()
 
+    /*
     public static void selectMessages(String opts) throws SQLException, ClassNotFoundException {
-
         int firstSpaceIndex = opts.indexOf(' ');
         String optionString = opts.substring(firstSpaceIndex + 1);
         String[] options = optionString.split(" ");
@@ -168,7 +168,6 @@ public class MicroblogDatabase {
                 pstmt.setInt(1, messageId);
                 ResultSet prs = pstmt.executeQuery();
                 while (prs.next()) {
-                    System.out.println(prs.getString("username"));
                     System.out.println(prs.getString("header"));
                     System.out.println(prs.getString("content"));
                     System.out.println(prs.getString("timestamp"));
@@ -181,6 +180,8 @@ public class MicroblogDatabase {
             stmt.close();
         }
     }
+
+     */
 
     public void close() throws SQLException {
         conn.close();

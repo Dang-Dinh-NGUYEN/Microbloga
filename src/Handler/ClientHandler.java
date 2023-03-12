@@ -31,23 +31,26 @@ public class ClientHandler implements Runnable {
             user = in.readLine();
             if (MicroblogDatabase.Authentification(user)) {
                 System.out.println("CONNECT user: " + user);
+                PublisherHandler publisherHandler = new PublisherHandler(clientSocket);
 
                 //sending notification and a list of operations to client
                 out.println("OK");
-                out.println("Select an action: PUBLISH || RCV_IDS [author:@user] [tag:#tag] [since_id:id] [limit:n]");
-
-                while (true) {
-                    String choice = in.readLine();
-                    if (choice == null) break;
-                    if (choice.equals("PUBLISH")) {
-                        PublisherHandler publisherHandler = new PublisherHandler(clientSocket);
-                        publisherHandler.run();
-                    } else if (choice.equals("RCV_IDS")) {
-
-                    } else if(choice.equals("RCV_MSG")){}
-                    else {
-                        out.println("ERREUR");
-                        break;
+                while (clientSocket.isConnected()) {
+                    while (true) {
+                        out.println("Select an action: PUBLISH | RCV_IDS [author:@user] [tag:#tag] [since_id:id] [limit:n] | RCV_MSG msg_id:id");
+                        String choice = in.readLine();
+                        if (choice == null) break;
+                        if (choice.equals("PUBLISH")) {
+                            publisherHandler.run();
+                        } else if (choice.startsWith("RCV_IDS")) {
+                            publisherHandler.MSG_ID(choice);
+                        } else if (choice.startsWith("RCV_MSG msg_id:")) {
+                            String id = choice.substring(choice.indexOf(':') + 1);
+                            publisherHandler.MSG(id);
+                        } else {
+                            out.println("ERREUR");
+                            break;
+                        }
                     }
                 }
             }

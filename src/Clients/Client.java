@@ -33,6 +33,7 @@ public class Client {
             in = new BufferedReader(new InputStreamReader(s.getInputStream()));
             out = new PrintWriter(s.getOutputStream(), true);
             br = new BufferedReader(new InputStreamReader(System.in));
+            Publisher publisher = new Publisher();
 
             //sending request to server
             String header = pseudo;
@@ -43,25 +44,24 @@ public class Client {
             System.out.println(">> " + reponse);
 
             // If the authentication was successful, display the available operations and prompt the user to choose one
-            if(reponse.equals("OK")){
-                System.out.println(in.readLine());
+            if(reponse.equals("OK")) {
+                while (true) {
+                    System.out.println(in.readLine());
+                    // Prompt the user to choose an operation
+                    BufferedReader selector = new BufferedReader(new InputStreamReader(System.in));
+                    System.out.println("Enter the operation you want to perform:");
+                    String choice = selector.readLine();
 
-                // Prompt the user to choose an operation
-                BufferedReader selector = new BufferedReader(new InputStreamReader(System.in));
-                System.out.println("Enter the operation you want to perform:");
-                String choice = selector.readLine();
+                    // Send the chosen operation to the server and wait for the result
 
-                // Send the chosen operation to the server and wait for the result
-                out.println(choice);
-                if(choice.equals("PUBLISH")){
-                    Publisher publisher = new Publisher();
-                    publisher.execute();
-                }else if(choice.startsWith("RCV_IDS")){
-                    MicroblogDatabase.selectMessages(choice);
-                }else if(choice.startsWith("RCV_MSG")){
-
+                    if (choice.equals("PUBLISH")) {
+                        publisher.publish();
+                    } else if (choice.startsWith("RCV_IDS")) {
+                        publisher.recevoir(choice);
+                    } else if (choice.startsWith("RCV_MSG")) {
+                        publisher.recevoir(choice);
+                    }
                 }
-
             }
         }
         s.close();
