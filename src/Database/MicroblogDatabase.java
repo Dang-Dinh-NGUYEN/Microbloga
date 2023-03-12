@@ -88,55 +88,95 @@ public class MicroblogDatabase {
         db.close();
     }
 
+    //public static void  selectMessagesById()
+
     public static void selectMessages(String opts) throws SQLException, ClassNotFoundException {
-        MicroblogDatabase db = new MicroblogDatabase();
 
         int firstSpaceIndex = opts.indexOf(' ');
         String optionString = opts.substring(firstSpaceIndex + 1);
         String[] options = optionString.split(" ");
         int nbOpt = options.length;
 
-        for (int i = 0; i < nbOpt; i++) {
-            System.out.println(options[i]);
-        }
-
-        String user, tag, id, limit;
-        if(nbOpt > 0 && nbOpt <= 4) {
-            String sql = "SELECT * FROM messages ";
-            StringBuilder queryBuilder = new StringBuilder(sql);
-
+        String user = null, tag = null, id = null, limit = "5";
+        if (nbOpt > 0 && nbOpt <= 4) {
             for (int i = 0; i < nbOpt; i++) {
                 if (options[i].startsWith("author:")) {
                     user = options[i].substring(options[i].indexOf(':') + 1);
-                    queryBuilder.append("WHERE username = " + user);
                 }
                 if (options[i].startsWith("tag:")) {
                     tag = options[i].substring(options[i].indexOf(':') + 1);
-                    queryBuilder.append(" AND tag = " + tag);
                 }
                 if (options[i].startsWith("since_id:")) {
                     id = options[i].substring(options[i].indexOf(':') + 1);
-                    queryBuilder.append(" AND tag = " + id);
                 }
                 if (options[i].startsWith("limit:")) {
                     limit = options[i].substring(options[i].indexOf(':') + 1);
-                    queryBuilder.append(" AND limit = " + limit);
                 }
             }
-            System.out.println(queryBuilder);
-            PreparedStatement stmt = conn.prepareStatement(queryBuilder.toString());
 
+            String sql = "SELECT * FROM messages ";
+            StringBuilder queryBuilder = new StringBuilder(sql);
+
+            if (user != null || tag != null || id != null) queryBuilder.append("WHERE ");
+            if (user != null) queryBuilder.append("username = ?");
+
+            if (tag != null) {
+                if (user != null) queryBuilder.append(" AND ");
+                queryBuilder.append("id IN (SELECT message_id FROM message_tags WHERE tag_name = ?)");
+            }
+
+            if (id != null) {
+                if (user != null || tag != null) queryBuilder.append(" AND ");
+                queryBuilder.append("id > ?");
+            }
+
+            queryBuilder.append(" ORDER BY id DESC LIMIT ?");
+
+            PreparedStatement stmt = conn.prepareStatement(queryBuilder.toString());
+            int paramIndex = 1;
+            if (queryBuilder.toString().contains("username = ?")) stmt.setString(paramIndex++, user);
+            if (queryBuilder.toString().contains("id IN (SELECT message_id FROM message_tags WHERE tag_name = ?)")) stmt.setString(paramIndex++, tag);
+            if (queryBuilder.toString().contains("id > ?")) stmt.setInt(paramIndex++, Integer.parseInt(id));
+            stmt.setInt(paramIndex++, Integer.parseInt(limit));
             ResultSet rs = stmt.executeQuery();
 
             while (rs.next()) {
-                System.out.println("Message ID: " + rs.getInt("id"));
-                System.out.println("Username: " + rs.getString("username"));
-                System.out.println("Tag: " + rs.getString("tag"));
-                System.out.println("Content: " + rs.getString("content"));
-                System.out.println("Date: " + rs.getDate("date"));
-                System.out.println();
-            }
+                // Get message ID
+                int messageId = rs.getInt("id");
 
+                // Check if author option was specified
+                if (user != null) {
+                    String author = rs.getString("username");
+                    if (!author.equals(user))
+                        // Skip message if it doesn't match author option
+                        continue;
+                }
+
+                // Check if since_id option was specified
+                if (id != null) {
+                    int messageSinceId = rs.getInt("id");
+                    if (messageSinceId <= Integer.parseInt(id))
+                        // Skip message if it was published before since_id option
+                        continue;
+                }
+
+                // Check if limit has been reached
+                if (Integer.parseInt(limit) - 1 <= 0) break;
+
+                System.out.println(messageId);
+                PreparedStatement pstmt = conn.prepareStatement("SELECT * FROM messages WHERE id = ?");
+                pstmt.setInt(1, messageId);
+                ResultSet prs = pstmt.executeQuery();
+                while (prs.next()) {
+                    System.out.println(prs.getString("username"));
+                    System.out.println(prs.getString("header"));
+                    System.out.println(prs.getString("content"));
+                    System.out.println(prs.getString("timestamp"));
+                    System.out.println();
+                }
+                prs.close();
+                pstmt.close();
+            }
             rs.close();
             stmt.close();
         }

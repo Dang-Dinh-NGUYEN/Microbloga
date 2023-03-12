@@ -43,8 +43,9 @@ public class ClientHandler implements Runnable {
                         PublisherHandler publisherHandler = new PublisherHandler(clientSocket);
                         publisherHandler.run();
                     } else if (choice.equals("RCV_IDS")) {
-                        System.out.println("Accept");
-                    } else {
+
+                    } else if(choice.equals("RCV_MSG")){}
+                    else {
                         out.println("ERREUR");
                         break;
                     }

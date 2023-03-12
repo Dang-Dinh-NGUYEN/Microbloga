@@ -58,6 +58,8 @@ public class Client {
                     publisher.execute();
                 }else if(choice.startsWith("RCV_IDS")){
                     MicroblogDatabase.selectMessages(choice);
+                }else if(choice.startsWith("RCV_MSG")){
+
                 }
 
             }
