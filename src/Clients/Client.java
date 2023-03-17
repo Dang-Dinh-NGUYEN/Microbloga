@@ -46,21 +46,25 @@ public class Client {
             // If the authentication was successful, display the available operations and prompt the user to choose one
             if(reponse.equals("OK")) {
                 while (true) {
-                    System.out.println(in.readLine());
-                    // Prompt the user to choose an operation
-                    BufferedReader selector = new BufferedReader(new InputStreamReader(System.in));
+                    //System.out.println(in.readLine());
                     System.out.println("Enter the operation you want to perform:");
-                    String choice = selector.readLine();
+
+                    // Prompt the user to choose an operation
+                    BufferedReader op = new BufferedReader(new InputStreamReader(System.in));
+                    String choice = op.readLine();
 
                     // Send the chosen operation to the server and wait for the result
+                    out.println(choice);
 
                     if (choice.equals("PUBLISH")) {
                         publisher.publish();
                     } else if (choice.startsWith("RCV_IDS")) {
+                        System.out.println(choice);
                         publisher.recevoir(choice);
                     } else if (choice.startsWith("RCV_MSG")) {
                         publisher.recevoir(choice);
                     }
+
                 }
             }
         }

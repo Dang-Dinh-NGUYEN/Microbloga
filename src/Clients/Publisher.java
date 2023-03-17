@@ -13,14 +13,13 @@ public class Publisher extends Client {
         String header = "PUBLISH author: " + pseudo;
         out.println(header);
 
-        System.out.println("Enter your messages (type '\\r\\n' to stop) : ");
+        System.out.println("Enter your messages (type 'exit' to stop) : ");
         String body = "", reponse = "";
-        while (true) {
+        do {
             body = br.readLine();
             out.println(body);
-            //out.flush();
-            if(body.equals("\\r\\n")) break;
-        }
+            out.flush();
+        } while (!body.equals("exit"));
         reponse = in.readLine();
         System.out.println(">>" + reponse);
     }
@@ -31,7 +30,10 @@ public class Publisher extends Client {
         String reponse;
         while(true) {
             reponse = in.readLine();
-            if(reponse == null) break;
+            if(reponse == null){
+                System.out.println("END.");
+                break;
+            }
             System.out.println(reponse);
         }
     }

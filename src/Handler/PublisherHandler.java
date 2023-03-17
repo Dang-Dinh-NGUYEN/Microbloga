@@ -2,6 +2,7 @@ package Handler;
 
 import Database.MicroblogDatabase;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.net.Socket;
 import java.sql.PreparedStatement;
@@ -11,14 +12,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 
-public class PublisherHandler extends ClientHandler implements Runnable {
+public class PublisherHandler extends ClientHandler {
 
     public PublisherHandler(Socket clientSocket) throws IOException {
         super(clientSocket);
     }
 
-    @Override
-    public void run() {
+    public void publish(BufferedReader in) {
         String header = null;
         try {
             header = in.readLine();
@@ -34,7 +34,7 @@ public class PublisherHandler extends ClientHandler implements Runnable {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            if (message.equals("\\r\\n")) break;
+            if (message.equals("exit")) break;
             if (message.startsWith("#")) tag = message;
 
             body.append(message);
