@@ -13,6 +13,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ClientHandler implements Runnable {
     private Socket clientSocket;
@@ -27,51 +29,57 @@ public class ClientHandler implements Runnable {
         out = new PrintWriter(clientSocket.getOutputStream(), true);
     }
 
-    public void PUBLISH_REPONSE() {
+    public void PUBLISH_REPLY() throws IOException, SQLException, ClassNotFoundException {
+        //reading message header
         String header = null;
-        try {
-            header = in.readLine();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        header = in.readLine();
+
+        //reading message content
         StringBuilder body = new StringBuilder();
         String tag = null;
         while (true) {
             String message = null;
-            try {
-                message = in.readLine();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            if (message.equals("exit")) break;
+            message = in.readLine();
+            if (message.equals("$")) break;
             if (message.startsWith("#")) tag = message;
-
             body.append(message);
         }
+
+        if(header.startsWith("REPLY")) {
+            String replyToId;
+            Pattern pattern = Pattern.compile("reply_to_id:\\s*(\\d+)");
+            Matcher matcher = pattern.matcher(header);
+            if (matcher.find()) {
+                replyToId = matcher.group(1);
+            } else {
+                out.println("ERREUR");
+                return;
+            }
+            MicroblogDatabase.REPLY(user, header, body.toString(), replyToId);
+        } else {
+            MicroblogDatabase.PUBLISH(user, header, body.toString());
+        }
+
         System.out.println(header);
         System.out.println(body.toString());
         String formattedDateTime = LocalDateTime.now().
                 format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         System.out.println(formattedDateTime);
-        try {
-            MicroblogDatabase.PUBLISH(user, header, body.toString());
 
-            //if the message includes a tag (suppose that each message has only one tag) then add to database
-            if(tag != null) {
-                int id = MicroblogDatabase.GET_MSG_ID(user,formattedDateTime);
-                if ( id != -1) {
-                    MicroblogDatabase.ADD_TAG(id,tag);
-                }
+        //if the message includes a tag (suppose that each message has only one tag) then add to database
+        if(tag != null) {
+            int id = MicroblogDatabase.GET_MSG_ID(user,formattedDateTime);
+            if ( id != -1) {
+                MicroblogDatabase.ADD_TAG(id,tag);
             }
-        } catch (SQLException | ClassNotFoundException throwable) {
-            //throwable.printStackTrace();
-            System.out.println("ERROR:PUBLISH FAILED");
         }
+
+        out.flush();
         out.println("OK");
     }
 
     public void MSG_ID(String opts) throws SQLException, ClassNotFoundException {
-        String header = "MSG_IDS";
+        String header = ">> MSG_IDS";
         out.println(header);
 
         int firstSpaceIndex = opts.indexOf(' ');
@@ -115,13 +123,16 @@ public class ClientHandler implements Runnable {
 
         queryBuilder.append(" ORDER BY id DESC LIMIT ?");
 
-        PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(queryBuilder.toString());
+        String query = queryBuilder.toString();
+        PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(query);
+
         int paramIndex = 1;
         if (queryBuilder.toString().contains("username = ?")) stmt.setString(paramIndex++, user);
         if (queryBuilder.toString().contains("id IN (SELECT message_id FROM message_tags WHERE tag_name = ?)")) stmt.setString(paramIndex++, tag);
         if (queryBuilder.toString().contains("id > ?")) stmt.setInt(paramIndex++, Integer.parseInt(id));
         stmt.setInt(paramIndex++, Integer.parseInt(limit));
         ResultSet rs = stmt.executeQuery();
+
 
         while (rs.next()) {
             // Get message ID
@@ -131,8 +142,7 @@ public class ClientHandler implements Runnable {
             if (user != null) {
                 String author = rs.getString("username");
                 if (!author.equals(user))
-                    // Skip message if it doesn't match author option
-                    continue;
+                    continue; // Skip message if it doesn't match author option
             }
 
             // Check if since_id option was specified
@@ -146,21 +156,100 @@ public class ClientHandler implements Runnable {
             // Check if limit has been reached
             if (Integer.parseInt(limit) - 1 <= 0) break;
 
-            out.println(">>" + messageId);
+            out.println(messageId);
             PreparedStatement pstmt = MicroblogDatabase.conn.prepareStatement("SELECT * FROM messages WHERE id = ?");
             pstmt.setInt(1, messageId);
             ResultSet prs = pstmt.executeQuery();
             while (prs.next()) {
-                out.println(">>" +prs.getString("header"));
-                out.println(">>" +prs.getString("content"));
-                out.println(">>" +prs.getString("timestamp"));
+                out.println(prs.getString("header"));
+                out.println(prs.getString("content"));
+                out.println(prs.getString("timestamp"));
                 out.println();
             }
             prs.close();
             pstmt.close();
         }
+        out.flush();
         rs.close();
         stmt.close();
+        out.println("$"); // send a null or empty line to terminate the stream
+    }
+
+    public void RCV_MSG(String cmd) throws SQLException {
+        String id = cmd.substring(cmd.indexOf(":") + 1);
+        //String header = ">> MSG ";
+        //out.println(header);
+
+        String sql = "SELECT * FROM messages WHERE id = ?";
+
+        PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(sql);
+        stmt.setInt(1, Integer.parseInt(id));
+        ResultSet rs = stmt.executeQuery();
+
+        String author = null, msg_id = null,
+                content = null, header = null, date = null;
+        Integer reply_to_id = null;
+
+        while (rs.next()) {
+            msg_id = String.valueOf(rs.getInt("id"));
+            author = rs.getString("username");
+            header = rs.getString("header");
+            content = rs.getString("content");
+            date = rs.getString("timestamp");
+            reply_to_id = rs.getInt("reply_to");
+            if (rs.wasNull()) {
+                reply_to_id = null;
+            }
+        }
+        String response = ">> MSG author:" + author + " msg_id:" + msg_id;
+        if(reply_to_id != null) response += " reply_to_id:" + reply_to_id;
+        if(header.contains("REPUBLISH")) response += " republished:true";
+
+        out.println(response);
+        out.println(content);
+        out.println(date);
+        out.println();
+
+        out.flush();
+        rs.close();
+        stmt.close();
+        out.println("$"); // send a null or empty line to terminate the stream
+    }
+
+    public void REPUBLISH(String cmd) throws SQLException, ClassNotFoundException, IOException {
+        String header = null;
+        header = in.readLine();
+
+        String republishId;
+        Pattern pattern = Pattern.compile("msg_id:\\s*(\\d+)");
+        Matcher matcher = pattern.matcher(cmd);
+        if (matcher.find()) {
+            republishId = matcher.group(1);
+
+            String sql = "SELECT * FROM messages WHERE id = ?";
+            PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(sql);
+            stmt.setInt(1, Integer.parseInt(republishId));
+            ResultSet rs = stmt.executeQuery();
+
+            String body = null;
+            while (rs.next()) {
+                header = header + " - " + rs.getString("header");
+                body = rs.getString("content");
+
+                out.println(rs.getInt("id"));
+                out.println(rs.getString("header"));
+                out.println(rs.getString("content"));
+                out.println(rs.getString("timestamp"));
+                out.println();
+            }
+            MicroblogDatabase.PUBLISH(user, header, body);
+
+            out.flush();
+            out.println(">> OK");
+        } else {
+            out.println("ERREUR");
+            return;
+        }
     }
 
     @Override
@@ -170,155 +259,32 @@ public class ClientHandler implements Runnable {
             user = in.readLine();
             if (MicroblogDatabase.Authentification(user)) {
                 System.out.println("CONNECT user: " + user);
-                PublisherHandler publisherHandler = new PublisherHandler(clientSocket);
                 //sending notification and a list of operations to client
                 out.println("OK");
-                //while (clientSocket.isConnected()) {
-                    while (true) {
-                        //out.println("Select an action: PUBLISH | RCV_IDS [author:@user] [tag:#tag] [since_id:id] [limit:n] | RCV_MSG msg_id:id");
+                while (clientSocket.isConnected()) {
                         String cmd = in.readLine();
+                        /*
                         if (cmd.isBlank() || cmd.isEmpty() || cmd.equals("\r\n") || cmd.equals("\t") || cmd.equals("")) {
                             System.out.println("nullpoint");
                             break;
                         }
+                         */
                         if (cmd.equals("PUBLISH")) {
-                            PUBLISH_REPONSE();
+                            PUBLISH_REPLY();
                         } else if (cmd.startsWith("RCV_IDS")) {
-                            System.out.println(cmd);
-                            String header = "MSG_IDS";
-                            out.println(header);
-
-                            int firstSpaceIndex = cmd.indexOf(' ');
-                            String optionString = cmd.substring(firstSpaceIndex + 1);
-                            String[] options = optionString.split(" ");
-                            int nbOpt = options.length;
-
-                            String user = null, tag = null, id = null, limit = "5";
-                            if (nbOpt > 0 && nbOpt <= 4) {
-                                for (int i = 0; i < nbOpt; i++) {
-                                    if (options[i].startsWith("author:")) {
-                                        user = options[i].substring(options[i].indexOf(':') + 1);
-                                    }
-                                    if (options[i].startsWith("tag:")) {
-                                        tag = options[i].substring(options[i].indexOf(':') + 1);
-                                    }
-                                    if (options[i].startsWith("since_id:")) {
-                                        id = options[i].substring(options[i].indexOf(':') + 1);
-                                    }
-                                    if (options[i].startsWith("limit:")) {
-                                        limit = options[i].substring(options[i].indexOf(':') + 1);
-                                    }
-                                }
-                            }
-
-                            String sql = "SELECT * FROM messages ";
-                            StringBuilder queryBuilder = new StringBuilder(sql);
-
-                            if (user != null || tag != null || id != null) queryBuilder.append("WHERE ");
-                            if (user != null) queryBuilder.append("username = ?");
-
-                            if (tag != null) {
-                                if (user != null) queryBuilder.append(" AND ");
-                                queryBuilder.append("id IN (SELECT message_id FROM message_tags WHERE tag_name = ?)");
-                            }
-
-                            if (id != null) {
-                                if (user != null || tag != null) queryBuilder.append(" AND ");
-                                queryBuilder.append("id > ?");
-                            }
-
-                            queryBuilder.append(" ORDER BY id DESC LIMIT ?");
-
-                            PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(queryBuilder.toString());
-                            int paramIndex = 1;
-                            if (queryBuilder.toString().contains("username = ?")) stmt.setString(paramIndex++, user);
-                            if (queryBuilder.toString().contains("id IN (SELECT message_id FROM message_tags WHERE tag_name = ?)")) stmt.setString(paramIndex++, tag);
-                            if (queryBuilder.toString().contains("id > ?")) stmt.setInt(paramIndex++, Integer.parseInt(id));
-                            stmt.setInt(paramIndex++, Integer.parseInt(limit));
-                            ResultSet rs = stmt.executeQuery();
-
-                            while (rs.next()) {
-                                // Get message ID
-                                int messageId = rs.getInt("id");
-
-                                // Check if author option was specified
-                                if (user != null) {
-                                    String author = rs.getString("username");
-                                    if (!author.equals(user))
-                                        // Skip message if it doesn't match author option
-                                        continue;
-                                }
-
-                                // Check if since_id option was specified
-                                if (id != null) {
-                                    int messageSinceId = rs.getInt("id");
-                                    if (messageSinceId <= Integer.parseInt(id))
-                                        // Skip message if it was published before since_id option
-                                        continue;
-                                }
-
-                                // Check if limit has been reached
-                                if (Integer.parseInt(limit) - 1 <= 0) break;
-
-                                out.println(">>" + messageId);
-                                PreparedStatement pstmt = MicroblogDatabase.conn.prepareStatement("SELECT * FROM messages WHERE id = ?");
-                                pstmt.setInt(1, messageId);
-                                ResultSet prs = pstmt.executeQuery();
-                                while (prs.next()) {
-                                    out.println(">>" +prs.getString("header"));
-                                    out.println(">>" +prs.getString("content"));
-                                    out.println(">>" +prs.getString("timestamp"));
-                                    out.println();
-                                }
-                                prs.close();
-                                pstmt.close();
-                            }
-                            rs.close();
-                            stmt.close();
-
-                        } else if (cmd.startsWith("RCV_MSG msg_id:")) {
-                            String id = cmd.substring(cmd.indexOf(":") + 1);
-                            String header = "MSG";
-                            out.println(header);
-
-                            String sql = "SELECT * FROM messages WHERE id = ?";
-
-                            PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(sql);
-                            stmt.setInt(1, Integer.parseInt(id));
-                            ResultSet rs = stmt.executeQuery();
-                            if(!rs.next()) {
-                                out.println("ERREUR: MESSAGE DOES NOT EXIST");
-                                rs.close();
-                                stmt.close();
-                                return;
-                            }
-
-                            while (rs.next()) {
-                                int messageId = rs.getInt("id");
-                                out.println(">>" + messageId);
-                                out.println(">>" +rs.getString("header"));
-                                out.println(">>" +rs.getString("content"));
-                                out.println(">>" +rs.getString("timestamp"));
-                                out.println();
-                            }
-                            rs.close();
-                            stmt.close();
-
-                        } else {
-                            //out.println("ERREUR");
-                            break;
+                            MSG_ID(cmd);
+                        } else if (cmd.startsWith("RCV_MSG")) {
+                            RCV_MSG(cmd);
+                        } else if (cmd.startsWith("REPLY")) {
+                            PUBLISH_REPLY();
+                        } else if (cmd.startsWith("REPUBLISH")) {
+                            REPUBLISH(cmd);
                         }
-
                     }
                 }
-            //}
             try {
                 in.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            out.close();
-            try {
+                out.close();
                 clientSocket.close();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -327,4 +293,5 @@ public class ClientHandler implements Runnable {
             e.printStackTrace();
         }
     }
+
 }
