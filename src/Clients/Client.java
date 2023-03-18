@@ -29,42 +29,49 @@ public class Client {
         System.out.print("Enter username: ");
         pseudo = scanner.nextLine();
 
-        if(MicroblogDatabase.Authentification(pseudo)) {
-            in = new BufferedReader(new InputStreamReader(s.getInputStream()));
-            out = new PrintWriter(s.getOutputStream(), true);
-            br = new BufferedReader(new InputStreamReader(System.in));
-            Publisher publisher = new Publisher();
+        in = new BufferedReader(new InputStreamReader(s.getInputStream()));
+        out = new PrintWriter(s.getOutputStream(), true);
+        br = new BufferedReader(new InputStreamReader(System.in));
 
-            //sending request to server
-            String header = pseudo;
-            out.println(header);
+        //sending request to server
+        String header = pseudo;
+        out.println(header);
 
-            //Wait for a response from the server
-            String reponse = in.readLine();
-            System.out.println(">> " + reponse);
+        //Wait for a response from the server
+        String reponse = in.readLine();
+        System.out.println(">> " + reponse);
 
-            // If the authentication was successful, display the available operations and prompt the user to choose one
-            if(reponse.equals("OK")) {
-                while (true) {
-                    //System.out.println(in.readLine());
-                    System.out.println("Enter the operation you want to perform:");
+        // If the authentication was successful, display the available operations and prompt the user to choose one
+        if(reponse.equals("OK")) {
+            while (true) {
+                //System.out.println(in.readLine());
+                System.out.println("Enter the operation you want to perform:");
+                // Prompt the user to choose an operation
+                String choice = br.readLine();
 
-                    // Prompt the user to choose an operation
-                    BufferedReader op = new BufferedReader(new InputStreamReader(System.in));
-                    String choice = op.readLine();
+                // Send the chosen operation to the server and wait for the result
+                out.println(choice);
 
-                    // Send the chosen operation to the server and wait for the result
-                    out.println(choice);
-
-                    if (choice.equals("PUBLISH")) {
-                        publisher.publish();
-                    } else if (choice.startsWith("RCV_IDS")) {
-                        System.out.println(choice);
-                        publisher.recevoir(choice);
-                    } else if (choice.startsWith("RCV_MSG")) {
-                        publisher.recevoir(choice);
-                    }
-
+                if (choice.equals("PUBLISH")) {
+                    Publisher publisher = new Publisher();
+                    header = "PUBLISH author: " + pseudo;
+                    out.println(header);
+                    publisher.publish();
+                }
+                if (choice.startsWith("RCV_IDS") ||choice.startsWith("RCV_MSG")) {
+                    new Follower().recevoir();
+                }
+                if (choice.startsWith("REPLY")) {
+                    Repost repost = new Repost();
+                    header = "REPLY author:" + pseudo + " reply_to_id:" + choice.substring(choice.indexOf(":") + 1) ;
+                    out.println(header);
+                    repost.reply();
+                }
+                if (choice.startsWith("REPUBLISH")) {
+                    Repost repost = new Repost();
+                    header = "REPUBLISH author:" + pseudo + " msg_id:" + choice.substring(choice.indexOf(":") + 1) ;
+                    out.println(header);
+                    repost.republish();
                 }
             }
         }
