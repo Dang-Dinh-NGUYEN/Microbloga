@@ -24,6 +24,12 @@ public class Follower extends Client{
         }
     }
 
+    public void subscribe() throws IOException {
+        String msg;
+        msg = in.readLine();
+        System.out.println(">> " + msg);
+    }
+
     //mode request-response
     public static void main(String args[]) throws IOException, SQLException, ClassNotFoundException {
         Socket s = new Socket(Server.SERVER, Server.PORT);
@@ -44,16 +50,22 @@ public class Follower extends Client{
         System.out.println(">> " + response);
 
         if(response.equals("OK")){
-            System.out.println("Enter RCV_IDS [author:@user] [tag:#tag] [since_id:id] [limit:n] || RCV_MSG msg_id:id to begin:");
+            System.out.println("Enter RCV_IDS [author:@user] [tag:#tag] [since_id:id] [limit:n] || RCV_MSG msg_id:id " +
+                    "|| (UN)SUBSCRIBE author:@user || (UN)SUBSCRIBE tag:#tag to begin:");
             String cmd = br.readLine();
             out.println(cmd);
-            while(true) {
-                String msg;
-                msg = in.readLine();
-                if(msg.equals("$")){
-                    break;
-                }
+            if(cmd.startsWith("SUBSCRIBE") || cmd.startsWith("UNSUBSCRIBE")){
+                String msg = in.readLine();
                 System.out.println(msg);
+            } else {
+                while (true) {
+                    String msg;
+                    msg = in.readLine();
+                    if (msg.equals("$")) {
+                        break;
+                    }
+                    System.out.println(msg);
+                }
             }
         }
 

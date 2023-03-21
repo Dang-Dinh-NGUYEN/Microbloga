@@ -1,7 +1,13 @@
 package Database;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.sql.*;
-import java.util.Scanner;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MicroblogDatabase {
     public static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
@@ -20,19 +26,51 @@ public class MicroblogDatabase {
         }
     }
 
-
-    public MicroblogDatabase() throws SQLException, ClassNotFoundException {
-        //Class.forName(JDBC_DRIVER);
-        //conn = DriverManager.getConnection(DB_URL, USER, PASS);
-    }
+    public MicroblogDatabase() throws SQLException, ClassNotFoundException {}
 
     public static void PUBLISH(String username, String header, String content) throws SQLException, ClassNotFoundException {
-        String sql = "INSERT INTO messages (username, header, content) VALUES (?, ?, ?)";
+        String sql1 = "INSERT INTO messages (username, header, content) VALUES (?, ?, ?)";
+
+        PreparedStatement pstmt1 = null;
+
+        ArrayList<String> tags = new ArrayList<>();
+        Pattern pattern = Pattern.compile("#\\w+");
+        Matcher matcher = pattern.matcher(content);
+        while (matcher.find()) {
+            String tag = matcher.group();
+            tags.add(tag);
+        }
+
+        try {
+            conn.setAutoCommit(false); // Start transaction
+
+            pstmt1 = conn.prepareStatement(sql1);
+            pstmt1.setString(1, username);
+            pstmt1.setString(2, header);
+            pstmt1.setString(3, content);
+            pstmt1.executeUpdate();
+
+            // Insert tags for the message
+            int messageID = GET_LAST_MSG_ID(); // Get the ID of the last inserted message
+            for (String tag : tags) {
+                ADD_TAG(messageID,tag);
+            }
+
+            conn.commit(); // Commit the transaction
+        } finally {
+            if (pstmt1 != null) pstmt1.close();
+        }
+    }
+
+    public static int GET_LAST_MSG_ID() throws SQLException, ClassNotFoundException {
+        int lastMessageID = -1;
+        String sql = "SELECT MAX(id) as max_id FROM messages";
         PreparedStatement pstmt = conn.prepareStatement(sql);
-        pstmt.setString(1, username);
-        pstmt.setString(2, header);
-        pstmt.setString(3, content);
-        pstmt.executeUpdate();
+        ResultSet rs = pstmt.executeQuery();
+        if (rs.next()) {
+            lastMessageID = rs.getInt("max_id");
+        }
+        return lastMessageID;
     }
 
     public static void REPLY(String username, String header, String content, String reply_to_id) throws SQLException, ClassNotFoundException {
@@ -45,36 +83,19 @@ public class MicroblogDatabase {
         pstmt.executeUpdate();
     }
 
-    public static int GET_MSG_ID(String user, String formattedDateTime) throws SQLException {
-        String sql = "SELECT id FROM messages WHERE username = ? AND timestamp = ?";
-        PreparedStatement pstmt = conn.prepareStatement(sql);
-        pstmt.setString(1, user);
-        pstmt.setString(2, formattedDateTime);
-        ResultSet rs = pstmt.executeQuery();
-        int id = -1;
-        if (rs.next()) {
-            id = rs.getInt("id");
-        }
-        rs.close();
-        pstmt.close();
-        return id;
-    }
-
     private static boolean HAS_TAG(String tag) throws SQLException, ClassNotFoundException {
         boolean exist = false;
 
         String sql = "SELECT COUNT(*) FROM tags WHERE (tag = ?)";
         PreparedStatement pstmt = conn.prepareStatement(sql);
         pstmt.setString(1, tag);
-        // Execute the query and check if the client's name exists in the database
+
+        // Execute the query and check if the tag exists in the database
         ResultSet rs = pstmt.executeQuery();
         rs.next();
         int count = rs.getInt(1);
         if (count > 0) exist = true;
-
-        // Close the database connection and release resources
         rs.close();
-        pstmt.close();
 
         return exist;
     }
@@ -88,14 +109,150 @@ public class MicroblogDatabase {
     }
 
     public static void ADD_TAG(int id, String tag) throws SQLException, ClassNotFoundException {
-        MicroblogDatabase db = new MicroblogDatabase();
         NEW_TAG(tag);
         String sql = "INSERT INTO message_tags (message_id, tag_name) VALUES (?, ?)";
         PreparedStatement pstmt = conn.prepareStatement(sql);
         pstmt.setString(1, String.valueOf(id));
         pstmt.setString(2, tag);
         pstmt.executeUpdate();
-        db.close();
+    }
+
+    public static void UNSUBSCRIBE_TAG(int id, String tag) throws SQLException, ClassNotFoundException {
+        if(!HAS_TAG(tag)) {
+            System.out.println("this tag does not exist");
+            return;
+        }
+        String sql = "DELETE FROM tag_followers WHERE user_id=? AND tag_name=?";
+        PreparedStatement pstmt = conn.prepareStatement(sql);
+        pstmt.setString(1, String.valueOf(id));
+        pstmt.setString(2, tag);
+        pstmt.executeUpdate();
+    }
+
+    public static void SUBSCRIBE_TAG(int id, String tag) throws SQLException, ClassNotFoundException {
+        if(!HAS_TAG(tag)) {
+            System.out.println("this tag does not exist");
+            return;
+        }
+        String sql = "INSERT INTO tag_followers (user_id, tag_name) VALUES (?, ?)";
+        PreparedStatement pstmt = conn.prepareStatement(sql);
+        pstmt.setString(1, String.valueOf(id));
+        pstmt.setString(2, tag);
+        pstmt.executeUpdate();
+    }
+
+    public static Set<String> GET_TAG_FOLLOWERS(String tagName) throws SQLException, ClassNotFoundException {
+        String query = "SELECT users.username " +
+                "FROM tag_followers " +
+                "JOIN users ON tag_followers.user_id = users.id " +
+                "WHERE tag_followers.tag_name = ?";
+        PreparedStatement pstmt = conn.prepareStatement(query);
+        pstmt.setString(1, tagName);
+        ResultSet rs = pstmt.executeQuery();
+
+        Set<String> followers = new HashSet<>();
+        while (rs.next()) {
+            String follower = rs.getString("username");
+            followers.add(follower);
+        }
+
+        return followers;
+    }
+
+    public static List<String> GET_MSG_TAGS(int messageId) throws SQLException {
+        List<String> tags = new ArrayList<>();
+
+        PreparedStatement stmt = conn.prepareStatement("SELECT tag_name FROM message_tags WHERE message_id = ?");
+        stmt.setInt(1, messageId);
+        try (ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                tags.add(rs.getString("tag_name"));
+            }
+        }
+
+        return tags;
+    }
+
+    public static void SUBSCRIBE_USER(int id1, int id2) throws SQLException, ClassNotFoundException {
+        /*
+        try{
+            // Create a statement to execute a SQL query
+            String query = "SELECT COUNT(*) FROM users WHERE (id = ?)";
+            PreparedStatement stmt = conn.prepareStatement(query);
+
+            // Set the client's name as a parameter in the query
+            stmt.setInt(1, id2);
+
+            // Execute the query and check if the client's id exists in the database
+            ResultSet rs = stmt.executeQuery();
+            rs.next();
+            int count = rs.getInt(1);
+            if (count > 0) {
+                String sql = "INSERT INTO user_followers (follower_id, followee_id) VALUES (?, ?)";
+                PreparedStatement pstmt = conn.prepareStatement(sql);
+                pstmt.setInt(1, id1);
+                pstmt.setInt(2, id2);
+                pstmt.executeUpdate();
+            } else {
+                System.out.println("user does not exist");
+            }
+        } catch (SQLException e){
+            System.out.println("user does not exist");
+        }
+         */
+
+        if(Authentification(id2)){
+            String sql = "INSERT INTO user_followers (follower_id, followee_id) VALUES (?, ?)";
+            PreparedStatement pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, id1);
+            pstmt.setInt(2, id2);
+            pstmt.executeUpdate();
+        } else {
+            System.out.println("user does not exist");
+        }
+
+    }
+
+    public static void UNSUBSCRIBE_USER(int id1, int id2) throws SQLException, ClassNotFoundException {
+        // Create a statement to execute a SQL query
+        String query = "SELECT COUNT(*) FROM user_followers WHERE (follower_id=? AND followee_id=?)";
+        PreparedStatement stmt = conn.prepareStatement(query);
+
+        // Set the client's name as a parameter in the query
+        stmt.setInt(1, id1);
+        stmt.setInt(2, id2);
+
+        // Execute the query and check if the client's id exists in the database
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        int count = rs.getInt(1);
+        if (count > 0) {
+            String sql = "DELETE FROM user_followers WHERE follower_id=? AND followee_id=?";
+            PreparedStatement pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, id1);
+            pstmt.setInt(2, id2);
+            pstmt.executeUpdate();
+        } else {
+            System.out.println("user does not exist");
+        }
+
+    }
+
+    public static Set<String> GET_USER_FOLLOWERS(String username) throws SQLException, ClassNotFoundException {
+        Set<String> followers = new HashSet<>();
+        String query = "SELECT u.username " +
+                "FROM users u " +
+                "JOIN user_followers f ON u.id = f.follower_id " +
+                "WHERE f.followee_id = (SELECT id FROM users WHERE username = ?)";
+        PreparedStatement stmt = conn.prepareStatement(query);
+        stmt.setString(1, username);
+        ResultSet rs = stmt.executeQuery();
+        while (rs.next()) {
+            followers.add(rs.getString("username"));
+        }
+        rs.close();
+        stmt.close();
+        return followers;
     }
 
     public void close() throws SQLException {
@@ -118,28 +275,59 @@ public class MicroblogDatabase {
             int count = rs.getInt(1);
             if (count > 0) {
                 exists = true;
-            } else {
-                SignUp();
             }
 
             // Close the database connection and release resources
             rs.close();
             stmt.close();
         } catch (SQLException ex) {
+            ex.printStackTrace();
             System.out.println("User doesn't exist");
         }
         return exists;
     }
 
-    public static void SignUp() throws SQLException {
-        System.out.println("Can't find your account/ Account doesn't exist.");
+    public static boolean Authentification(int user_id) {
+        boolean exists = false;
+        try {
+            // Create a statement to execute a SQL query
+            String query = "SELECT COUNT(*) FROM users WHERE (id = ?)";
+            PreparedStatement stmt = conn.prepareStatement(query);
+
+            // Set the client's name as a parameter in the query
+            stmt.setInt(1, user_id);
+
+            // Execute the query and check if the client's id exists in the database
+            ResultSet rs = stmt.executeQuery();
+            rs.next();
+            int count = rs.getInt(1);
+            if (count > 0) {
+                exists = true;
+            }
+
+            // Close the database connection and release resources
+            rs.close();
+            stmt.close();
+
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            System.out.println("User doesn't exist");
+        }
+
+        return exists;
+    }
+
+    public static void SignUp() throws SQLException, IOException {
         System.out.println("Do you want to sign up? yes/no");
         System.out.print("select: ");
-        Scanner scanner = new Scanner(System.in);
 
-        if(scanner.nextLine().equals("yes")) {
+        BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
+
+        String answer = in.readLine();
+
+        if(answer.equals("yes")) {
             System.out.print("Create your username (begin with '@'): ");
-            String username = scanner.nextLine();
+            String username = in.readLine();
             assert(username.charAt(0) == '@');
 
             String sql = "INSERT INTO users (username, password) VALUES (?, ?)";
@@ -153,13 +341,29 @@ public class MicroblogDatabase {
         }
     }
 
+    public static int GET_USER_ID(String user) throws SQLException {
+        String sql = "SELECT id FROM users WHERE username = ?";
+        PreparedStatement pstmt = conn.prepareStatement(sql);
+        pstmt.setString(1, user);
+        ResultSet rs = pstmt.executeQuery();
+        int id = -1;
+        if (rs.next()) {
+            id = rs.getInt("id");
+        }
+        rs.close();
+        return id;
+    }
+
     public static void main(String[] args) {
         try {
             //db.SignUp("james");
             //db.insertMessage("john", "Hello World!");
-            System.out.println(Authentification("@dean"));
-            System.out.println(Authentification("@james"));
-            System.out.println(HAS_TAG("#algo"));
+            //System.out.println(Authentification("@dean"));
+            //System.out.println(Authentification("@james"));
+            System.out.println(GET_USER_FOLLOWERS("@dean"));
+            System.out.println(GET_TAG_FOLLOWERS("#wedding"));
+            System.out.println(GET_MSG_TAGS(11));
+
         } catch (SQLException | ClassNotFoundException e) {
             e.printStackTrace();
         }

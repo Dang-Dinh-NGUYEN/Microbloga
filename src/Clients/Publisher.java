@@ -6,26 +6,28 @@ import Server.Server;
 import java.io.*;
 import java.net.Socket;
 import java.sql.SQLException;
+import java.util.Queue;
 import java.util.Scanner;
 
 public class Publisher extends Client {
 
     public Publisher() throws SQLException, ClassNotFoundException {}
 
+    /*----------------------------------------------------------------------------------
+    * M. REQUEST-RESPONSE
+    * ----------------------------------------------------------------------------------*/
     public void publish() throws IOException, SQLException, ClassNotFoundException {
         System.out.println("Enter your messages (type '$' to stop) : ");
-        String body = "", reponse = "";
+        String body = "", response = "";
         do {
             body = br.readLine();
             out.println(body);
             out.flush();
         } while (!body.equals("$"));
-        reponse = in.readLine();
-        System.out.println(">>" + reponse);
+        response = in.readLine();
+        System.out.println(">>" + response);
     }
 
-
-    //mode request-response
     public static void main(String args[]) throws IOException, SQLException, ClassNotFoundException {
         Socket s = new Socket(Server.SERVER, Server.PORT);
         System.out.print("Enter username: ");
@@ -51,15 +53,7 @@ public class Publisher extends Client {
                 out.println(cmd);
                 header = "PUBLISH author: " + pseudo;
                 out.println(header);
-                System.out.println("Enter your messages (type '$' to stop) : ");
-                String body = "", rep = "";
-                do {
-                    body = br.readLine();
-                    out.println(body);
-                    out.flush();
-                } while (!body.equals("$"));
-                rep = in.readLine();
-                System.out.println(">>" + rep);
+                new Publisher().publish();
             }
         }
 
@@ -69,5 +63,4 @@ public class Publisher extends Client {
         br.close();
         s.close();
     }
-
 }

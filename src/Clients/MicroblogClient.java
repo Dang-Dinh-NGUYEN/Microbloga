@@ -1,7 +1,7 @@
 package Clients;
 
 import Database.MicroblogDatabase;
-import Server.*;
+import Server.MicroblogCentral;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -9,21 +9,22 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.sql.SQLException;
-import java.util.HashSet;
-import java.util.Scanner;
-import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
-public class Client {
+public class MicroblogClient {
     protected static String pseudo;
 
     protected static BufferedReader in;
     protected static PrintWriter out;
     protected static BufferedReader br  = new BufferedReader(new InputStreamReader(System.in));
 
-    public Client() throws SQLException, ClassNotFoundException {}
+    protected static ConcurrentLinkedQueue<Integer> newMessages = new ConcurrentLinkedQueue<>();
+    protected static ConcurrentLinkedQueue<Integer> newFollows = new ConcurrentLinkedQueue<>();
+
+    public MicroblogClient() throws SQLException, ClassNotFoundException {}
 
     public static void main(String[] args) throws IOException, SQLException, ClassNotFoundException {
-        Socket s = new Socket(Server.SERVER, Server.PORT);
+        Socket s = new Socket(MicroblogCentral.SERVER, MicroblogCentral.PORT);
         System.out.print("Enter username: ");
         pseudo = br.readLine();
 

@@ -1,6 +1,4 @@
 package Handler;
-
-import Clients.Publisher;
 import Database.MicroblogDatabase;
 
 import java.io.BufferedReader;
@@ -13,35 +11,37 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ClientHandler implements Runnable {
-    private Socket clientSocket;
+    private final Socket clientSocket;
     protected static BufferedReader in;
     protected static PrintWriter out;
     protected static String user;
 
+    protected Set<String> keywords = new HashSet<>();
+    protected Set<String> users = new HashSet<>();
+
     public ClientHandler(Socket clientSocket) throws IOException {
         this.clientSocket = clientSocket;
-        in = new BufferedReader(
-                new InputStreamReader(clientSocket.getInputStream()));
+        in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
         out = new PrintWriter(clientSocket.getOutputStream(), true);
     }
 
-    public void PUBLISH_REPLY() throws IOException, SQLException, ClassNotFoundException {
+    private void PUBLISH_REPLY() throws IOException, SQLException, ClassNotFoundException {
         //reading message header
         String header = null;
         header = in.readLine();
 
         //reading message content
         StringBuilder body = new StringBuilder();
-        String tag = null;
         while (true) {
             String message = null;
             message = in.readLine();
             if (message.equals("$")) break;
-            if (message.startsWith("#")) tag = message;
             body.append(message);
         }
 
@@ -65,14 +65,6 @@ public class ClientHandler implements Runnable {
         String formattedDateTime = LocalDateTime.now().
                 format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         System.out.println(formattedDateTime);
-
-        //if the message includes a tag (suppose that each message has only one tag) then add to database
-        if(tag != null) {
-            int id = MicroblogDatabase.GET_MSG_ID(user,formattedDateTime);
-            if ( id != -1) {
-                MicroblogDatabase.ADD_TAG(id,tag);
-            }
-        }
 
         out.flush();
         out.println("OK");
@@ -177,9 +169,6 @@ public class ClientHandler implements Runnable {
 
     public void RCV_MSG(String cmd) throws SQLException {
         String id = cmd.substring(cmd.indexOf(":") + 1);
-        //String header = ">> MSG ";
-        //out.println(header);
-
         String sql = "SELECT * FROM messages WHERE id = ?";
 
         PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(sql);
@@ -248,9 +237,48 @@ public class ClientHandler implements Runnable {
             out.println(">> OK");
         } else {
             out.println("ERREUR");
-            return;
         }
     }
+
+    public void SUBSCRIPTION(String cmd) throws IOException, SQLException, ClassNotFoundException {
+        Pattern pattern = Pattern.compile("(author|tag):([#@]\\w+)");
+        Matcher matcher = pattern.matcher(cmd);
+
+        if (matcher.find()) {
+            String type = matcher.group(1);
+            String value = matcher.group(2);
+
+            if(cmd.startsWith("SUBSCRIBE")){
+                if (type.equals("author")) {
+                    MicroblogDatabase.SUBSCRIBE_USER(MicroblogDatabase.GET_USER_ID(user), MicroblogDatabase.GET_USER_ID(value));
+                    out.println(">> OK");
+                } else if(type.equals("tag")){
+                    MicroblogDatabase.SUBSCRIBE_TAG(MicroblogDatabase.GET_USER_ID(user),value);
+                    out.println(">> OK");
+                } else {
+                    out.println("ERREUR");
+                    return;
+                }
+            }
+            else if(cmd.startsWith("UNSUBSCRIBE")){
+                if (type.equals("author")) {
+                    MicroblogDatabase.UNSUBSCRIBE_USER(MicroblogDatabase.GET_USER_ID(user), MicroblogDatabase.GET_USER_ID(value));
+                    out.println(">> OK");
+                } else if(type.equals("tag")){
+                    MicroblogDatabase.UNSUBSCRIBE_TAG(MicroblogDatabase.GET_USER_ID(user),value);
+                    out.println(">> OK");
+                } else {
+                    out.println("ERREUR");
+                }
+            }
+
+        } else {
+            // Handle invalid subscription command
+            out.println("Invalid subscription command: " + cmd);
+        }
+
+    }
+
 
     @Override
     public void run() {
@@ -259,29 +287,25 @@ public class ClientHandler implements Runnable {
             user = in.readLine();
             if (MicroblogDatabase.Authentification(user)) {
                 System.out.println("CONNECT user: " + user);
-                //sending notification and a list of operations to client
+                //sending notification to client
                 out.println("OK");
-                while (clientSocket.isConnected()) {
-                        String cmd = in.readLine();
-                        /*
-                        if (cmd.isBlank() || cmd.isEmpty() || cmd.equals("\r\n") || cmd.equals("\t") || cmd.equals("")) {
-                            System.out.println("nullpoint");
-                            break;
-                        }
-                         */
-                        if (cmd.equals("PUBLISH")) {
-                            PUBLISH_REPLY();
-                        } else if (cmd.startsWith("RCV_IDS")) {
-                            MSG_ID(cmd);
-                        } else if (cmd.startsWith("RCV_MSG")) {
-                            RCV_MSG(cmd);
-                        } else if (cmd.startsWith("REPLY")) {
-                            PUBLISH_REPLY();
-                        } else if (cmd.startsWith("REPUBLISH")) {
-                            REPUBLISH(cmd);
-                        }
+                String cmd;
+                while ((cmd = in.readLine()) != null) {
+                    if (cmd.equals("PUBLISH")) {
+                        PUBLISH_REPLY();
+                    } else if (cmd.startsWith("RCV_IDS")) {
+                        MSG_ID(cmd);
+                    } else if (cmd.startsWith("RCV_MSG")) {
+                        RCV_MSG(cmd);
+                    } else if (cmd.startsWith("REPLY")) {
+                        PUBLISH_REPLY();
+                    } else if (cmd.startsWith("REPUBLISH")) {
+                        REPUBLISH(cmd);
+                    } else if (cmd.startsWith("SUBSCRIBE") || cmd.startsWith("UNSUBSCRIBE")) {
+                        SUBSCRIPTION(cmd);
                     }
                 }
+            } else { out.println("Can't find your account/ Account doesn't exist.");}
             try {
                 in.close();
                 out.close();
@@ -289,8 +313,8 @@ public class ClientHandler implements Runnable {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        } catch (IOException | SQLException | ClassNotFoundException e) {
-            e.printStackTrace();
+        } catch (IOException | SQLException | ClassNotFoundException ioException) {
+            ioException.printStackTrace();
         }
     }
 
