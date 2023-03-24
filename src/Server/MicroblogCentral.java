@@ -24,7 +24,7 @@ public class MicroblogCentral {
     protected static Map<String, Queue<Integer>> messageQueues = new ConcurrentHashMap<>();
 
     // A mapping of usernames to their corresponding client handlers
-    protected static Map<String, ClientHandlerMF> clients = new HashMap<>();
+    public static Map<String, ClientHandlerMF> clients = new HashMap<>();
 
     public final static int PORT = 12345;
     public final static String SERVER = "localhost";
@@ -142,7 +142,7 @@ public class MicroblogCentral {
 
             // Send notifications to online followers
             for (String follower : followers) {
-                Socket followerSocket = followers.get(follower);
+                Socket followerSocket = MicroblogCentral.followers.get(follower);
                 if (followerSocket != null) {
                     PrintWriter followerOut = new PrintWriter(followerSocket.getOutputStream(), true);
                     followerOut.println(user + " just posted: " + header);
