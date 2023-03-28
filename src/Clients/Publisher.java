@@ -43,10 +43,10 @@ public class Publisher extends Client {
         out.println(header);
 
         //Wait for a response from the server
-        String reponse = in.readLine();
-        System.out.println(">> " + reponse);
+        String response = in.readLine();
+        System.out.println(">> " + response);
 
-        if(reponse.equals("OK")){
+        if(response.equals("OK")){
             System.out.println("Enter PUBLISH to begin:");
             String cmd = br.readLine();
             if(cmd.equals("PUBLISH")) {

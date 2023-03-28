@@ -1,9 +1,9 @@
 package Database;
 
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.sql.*;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -29,6 +29,7 @@ public class MicroblogDatabase {
     public MicroblogDatabase() throws SQLException, ClassNotFoundException {}
 
     public static void PUBLISH(String username, String header, String content) throws SQLException, ClassNotFoundException {
+        assert(Authentification(username));
         String sql1 = "INSERT INTO messages (username, header, content) VALUES (?, ?, ?)";
 
         PreparedStatement pstmt1 = null;
@@ -73,13 +74,67 @@ public class MicroblogDatabase {
         return lastMessageID;
     }
 
+    public static boolean  GET_MSG_BY_ID(int msg_id) throws SQLException, ClassNotFoundException {
+        String sql = "SELECT * FROM messages WHERE id = ?";
+
+        PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(sql);
+        stmt.setInt(1, msg_id);
+        ResultSet rs = stmt.executeQuery();
+
+        if (!rs.isBeforeFirst()) {
+            System.out.println("No message found with id " + msg_id);
+            return false;
+        }
+
+        String author = null, content = null, header = null, date = null;
+        Integer reply_to_id = null;
+
+        while (rs.next()) {
+            author = rs.getString("username");
+            header = rs.getString("header");
+            content = rs.getString("content");
+            date = rs.getString("timestamp");
+            reply_to_id = rs.getInt("reply_to");
+            if (rs.wasNull()) {
+                reply_to_id = null;
+            }
+        }
+        String response = ">> MSG \nauthor:" + author + " msg_id:" + msg_id;
+        if (reply_to_id != null) response += " reply_to_id:" + reply_to_id;
+        if (header.contains("REPUBLISH")) response += " republished:true";
+
+        System.out.println(response);
+        System.out.println(content);
+        System.out.println(date);
+        System.out.println();
+        return true;
+    }
+
+    public static String GET_MSG_AUTHOR(int msg_id) throws SQLException {
+        String sql = "SELECT * FROM messages WHERE id = ?";
+
+        PreparedStatement stmt = MicroblogDatabase.conn.prepareStatement(sql);
+        stmt.setInt(1, msg_id);
+        ResultSet rs = stmt.executeQuery();
+
+        if (!rs.isBeforeFirst()) {
+            System.out.println("No message found with id " + msg_id);
+            return null;
+        }
+
+        return rs.getString("username");
+    }
+
     public static void REPLY(String username, String header, String content, String reply_to_id) throws SQLException, ClassNotFoundException {
+        assert(Authentification(username));
+        assert(GET_MSG_BY_ID(Integer.parseInt(reply_to_id)));
+
         String sql = "INSERT INTO messages (username, header, content, reply_to) VALUES (?, ?, ?, ?)";
         PreparedStatement pstmt = conn.prepareStatement(sql);
         pstmt.setString(1, username);
         pstmt.setString(2, header);
         pstmt.setString(3, content);
-        pstmt.setInt(4, Integer.valueOf(reply_to_id));
+        pstmt.setInt(4, Integer.parseInt(reply_to_id));
         pstmt.executeUpdate();
     }
 
@@ -159,8 +214,8 @@ public class MicroblogDatabase {
         return followers;
     }
 
-    public static List<String> GET_MSG_TAGS(int messageId) throws SQLException {
-        List<String> tags = new ArrayList<>();
+    public static Set<String> GET_MSG_TAGS(int messageId) throws SQLException {
+        Set<String> tags = new HashSet<>();
 
         PreparedStatement stmt = conn.prepareStatement("SELECT tag_name FROM message_tags WHERE message_id = ?");
         stmt.setInt(1, messageId);
@@ -337,7 +392,7 @@ public class MicroblogDatabase {
             pstmt.executeUpdate();
             System.out.println("User inserted: " + username);
         }else{
-            throw new SQLException("Cannot connect to server");
+            System.out.println(">> Cannot connect to server\n");
         }
     }
 
@@ -363,6 +418,7 @@ public class MicroblogDatabase {
             System.out.println(GET_USER_FOLLOWERS("@dean"));
             System.out.println(GET_TAG_FOLLOWERS("#wedding"));
             System.out.println(GET_MSG_TAGS(11));
+            GET_MSG_BY_ID(28);
 
         } catch (SQLException | ClassNotFoundException e) {
             e.printStackTrace();

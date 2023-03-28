@@ -11,8 +11,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -21,9 +19,6 @@ public class ClientHandler implements Runnable {
     protected static BufferedReader in;
     protected static PrintWriter out;
     protected static String user;
-
-    protected Set<String> keywords = new HashSet<>();
-    protected Set<String> users = new HashSet<>();
 
     public ClientHandler(Socket clientSocket) throws IOException {
         this.clientSocket = clientSocket;
